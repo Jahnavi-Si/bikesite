@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block content %}
+{% if not connected %}
+  {% if in_use %}
+    <p>The station is being used by someone else. Try again soon.</p>
+  {% else %}
+    <h2>Connect to the station</h2>
+    <form action="{{ url_for('connect') }}" method="post">
+      <label>Serial number of the bike plugged in <input name="serial" required></label>
+      <p class="hint">Later, the station's tag reader will fill this in for you.</p>
+      <button>Connect</button>
+    </form>
+  {% endif %}
+  <h3>Your registered bikes</h3>
+  {% if bikes %}
+    <ul class="bikes">
+  {% for b in bikes %}
+  <li>
+    <span>{{ b.serial }}</span>
+    <form method="post" action="{{ url_for('remove_bike') }}"
+          onsubmit="return confirm('Remove this bike?');">
+      <input type="hidden" name="serial" value="{{ b.serial }}">
+      <button class="quiet small">Remove</button>
+    </form>
+  </li>
+  {% endfor %}
+</ul>
+  {% else %}
+    <p>No bikes yet. Register one to get started.</p>
+  {% endif %}
+  <a class="btn" href="{{ url_for('register_bike') }}">Register new bike</a>
+{% else %}
+  <div id="notice" class="notice" {% if not s.full %}hidden{% endif %}>
+    Your bike is fully charged! Consider unlocking your bike or charger.
+  </div>
+  <h2>Bike {{ s.serial }}</h2>
+  <div class="bar"><div id="fill" style="width: {{ s.battery }}%"></div></div>
+  <p><strong id="pct">{{ s.battery }}%</strong> <span id="state"></span></p>
+  <p class="hint">
+    Bike: {{ 'locked' if s.bike_locked else 'unlocked' }} &middot;
+    Charger: {{ 'locked' if s.charger_locked else 'unlocked' }}
+  </p>
+
+  <div class="grid">
+    <form method="post" action="{{ url_for('action', name='stop' if s.charging else 'start') }}">
+      <button>{{ 'Stop charging' if s.charging else 'Start charging' }}</button>
+    </form>
+    <form method="post" action="{{ url_for('action', name='unlock_bike' if s.bike_locked else 'lock_bike') }}">
+      <button>{{ 'Unlock bike' if s.bike_locked else 'Lock bike' }}</button>
+    </form>
+    <form method="post" action="{{ url_for('action', name='unlock_charger' if s.charger_locked else 'lock_charger') }}">
+      <button>{{ 'Unlock charger' if s.charger_locked else 'Lock charger' }}</button>
+    </form>
+    <a class="btn" href="{{ url_for('register_bike') }}">Register new bike</a>
+  </div>
+  <form method="post" action="{{ url_for('disconnect') }}"><button class="quiet">Disconnect</button></form>
+
+  <script>
+    const wasCharging = {{ s.charging|tojson }};
+    async function poll() {
+      const d = await (await fetch("{{ url_for('api_status') }}")).json();
+      if (!d.connected || d.charging !== wasCharging) { location.reload(); return; }
+      document.getElementById("pct").textContent = d.battery + "%";
+      document.getElementById("fill").style.width = d.battery + "%";
+      document.getElementById("state").textContent = d.charging
+        ? "Charging, about " + d.seconds_left + " seconds left (demo speed)"
+        : "Not charging";
+      document.getElementById("notice").hidden = !d.full;
+    }
+    setInterval(poll, 2000);
+    poll();
+  </script>
+{% endif %}
+{% endblock %}
